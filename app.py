@@ -17,7 +17,7 @@ def hello_world():  # put application's code here
 """
 
 
-@app.route('/vocabulary', methods=['GET'])
+@app.route('/corpus/vocabulary', methods=['GET'])
 def get_vocabulary():
     # args = request.args
     # # get UserKey from args
@@ -29,7 +29,7 @@ def get_vocabulary():
     return {'type': 'vocabulary'}, 200, {'ContentType': 'application/json'}
 
 
-@app.route('/word-details', methods=['GET'])
+@app.route('/corpus/word-details', methods=['GET'])
 def get_word_details():
     # args = request.args
     # # get UserKey from args
