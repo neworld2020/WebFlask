@@ -1,26 +1,20 @@
-import random
+import ast
 from datetime import datetime, timedelta
 
-from flask import Flask, request
+from flask import Flask, request, send_file
 
-from DB_Client import DB_Client
+from mysql.Base import BaseMysqlClient, random_str
+from response_models import *
 
 app = Flask(__name__)
-
-
-def random_str(length: int) -> str:
-    # generate a string randomly
-    source_str = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-    source_str_len = len(source_str)
-    result_str = ""
-    for i in range(0, length):
-        result_str += random.choice(source_str)
-    return result_str
+base_db_client = BaseMysqlClient('rm-bp1712iyj3s1906i92o.mysql.rds.aliyuncs.com', 'account_admin', 'account@123456',
+                                 'memo-app-db')
 
 
 @app.route('/')
-def hello_world():  # put application's code here
-    return 'Hello World!'
+def index():
+    # 返回主页
+    return send_file("index/index.html")
 
 
 """
@@ -28,15 +22,13 @@ def hello_world():  # put application's code here
 """
 
 
-@app.route('/salt', methods=['GET'])
+@app.route('/user/salt', methods=['GET'])
 def get_salt():
     args = request.args
     username = args.get('username')
-    # 1. connect to database
-    db_client = DB_Client()
     # 2. find if user has registered
-    find_user_cmd = f"""SELECT salt FROM UserInfo WHERE username='{username}';"""
-    result = db_client.select(find_user_cmd)
+    find_user_cmd = f"""SELECT salt FROM userinfo WHERE username='{username}';"""
+    result = base_db_client.select(find_user_cmd)
     salt = None
     if len(result) == 0:
         # not registered -- generate salt
@@ -46,7 +38,7 @@ def get_salt():
     return {"salt": salt}, 200, {'ContentType': 'application/json'}
 
 
-@app.route('/login', methods=['POST'])
+@app.route('/user/login', methods=['POST'])
 def login():
     """
     {
@@ -57,74 +49,155 @@ def login():
     username = request.json.get("username").strip()  # 用户名
     password = request.json.get("password").strip()  # 密码
 
-    db_client = DB_Client()
-    login_cmd = f"""SELECT * FROM UserInfo WHERE username='{username}' AND password='{password}';"""
-    result = db_client.select(login_cmd)
+    login_cmd = f"""SELECT * FROM userinfo WHERE username='{username}' AND password='{password}';"""
+    result = base_db_client.select(login_cmd)
     if len(result) > 0:
-        # login success, allocate UserKey
-        session_activate_cmd = f"""SELECT UserKey, update_time FROM UserSession WHERE username='{username}';"""
-        session_result = db_client.select(session_activate_cmd)
+        # login success, allocate userkey
+        session_activate_cmd = f"""SELECT userkey, update_time FROM usersession WHERE username='{username}';"""
+        session_result = base_db_client.select(session_activate_cmd)
         user_key = random_str(64)
         if len(session_result) == 0:
             # store in database
             update_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            new_session_cmd = f"""INSERT INTO UserSession VALUES ('{username}', '{user_key}', '{update_time}');"""
-            db_client.run(new_session_cmd)
-            return {'UserKey': user_key}, 200, {'ContentType': 'application/json'}
+            new_session_cmd = f"""INSERT INTO usersession VALUES ('{username}', '{user_key}', '{update_time}');"""
+            base_db_client.run(new_session_cmd)
+            return {'userkey': user_key}, 200, {'ContentType': 'application/json'}
         else:
-            # update UserKey -- 10 minutes
+            # update userkey -- 10 minutes
             update_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            update_session_cmd = f"""UPDATE UserSession SET UserKey='{user_key}', update_time='{update_time}' 
+            update_session_cmd = f"""UPDATE usersession SET userkey='{user_key}', update_time='{update_time}' 
                                      WHERE username='{username}';"""
-            db_client.run(update_session_cmd)
-            return {'UserKey': user_key}, 200, {'ContentType': 'application/json'}
+            base_db_client.run(update_session_cmd)
+            return {'userkey': user_key}, 200, {'ContentType': 'application/json'}
     else:
         # login fail
         return {'error': 'login fail'}, 400, {'ContentType': 'application/json'}
 
 
 """
-语料库获取相关，需要用户已登录并已获得UserKey，以后所有数据库获取都需要UserKey
+语料库获取相关，需要用户已登录并已获得userkey，以后所有数据库获取都需要userkey
 """
+voca_num = 20
 
 
-def get_user_by_key(UserKey: str):
-    db_client = DB_Client()
-    get_user_cmd = f"""SELECT * FROM UserSession WHERE UserKey='{UserKey}';"""
-    result = db_client.select(get_user_cmd)
+def get_user_by_key(userkey: str):
+    get_user_cmd = f"""SELECT * FROM usersession WHERE userkey='{userkey}';"""
+    result = base_db_client.select(get_user_cmd)
     if len(result) == 0 or datetime.now() - result[0][2] > timedelta(days=1):
-        # UserKey not found or expired -- one day
+        # userkey not found or expired -- one day
         return None
     else:
         return result[0][0]
 
 
-@app.route('/vocabulary', methods=['GET'])
+def get_vocabulary_for_user(user: str) -> Vocabulary:
+    search_cmd = f"""SELECT word FROM uservoca WHERE username='{user}';"""
+    result = base_db_client.select(search_cmd)
+    if len(result) > 0:
+        word = result[0][0]
+        new_voca_cmd = f"""INSERT INTO static_vocabulary(%s) VALUES(%s)"""
+    else:
+        search_cmd = """SELECT word FROM static_vocabulary LIMIT 0, 1;"""
+        result = base_db_client.select(search_cmd)
+        word = result[0][0]
+
+    find_row_num_cmd = f"""
+    SELECT * from (
+    SELECT word,(@rowno:=@rowno+1) as rowno
+    FROM static_vocabulary,(SELECT (@rowno:=-1)) b) t
+    WHERE word = '{word}';
+    """
+    result = base_db_client.select(find_row_num_cmd)
+    row_num = int(result[0][1])
+
+    find_vocabulary_cmd = f"""SELECT word FROM static_vocabulary LIMIT {row_num}, {voca_num};"""
+    result = base_db_client.select(find_vocabulary_cmd)
+
+    word_list = []
+    for i in range(voca_num):
+        w = Word(result[i][0], 0)
+        word_list.append(w)
+    v = Vocabulary(word_list)
+    return v
+
+
+@app.route('/corpus/vocabulary', methods=['GET'])
 def get_vocabulary():
     args = request.args
-    # get UserKey from args
-    user_key = args.get('UserKey')
+    # get userkey from args
+    user_key = args.get('userkey')
     user = get_user_by_key(user_key)
     if user is None:
-        return {'error': 'UserKey not found or expired'}, 400, {'ContentType': 'application/json'}
+        return {'error': 'userkey not found or expired'}, 400, {'ContentType': 'application/json'}
     # # get suitable vocabulary for user
-    # vocabulary = get_vocabulary_for_user(user)
+    vocabulary = get_vocabulary_for_user(user)
     # return vocabulary
-    return {'type': 'vocabulary'}, 200, {'ContentType': 'application/json'}
+    return vocabulary.to_dict(), 200, {'ContentType': 'application/json'}
 
 
-@app.route('/word-details', methods=['GET'])
+def get_word_details_for_user(user: str) -> WordDetails:
+    search_cmd = f"""SELECT word FROM uservoca WHERE username='{user}';"""
+    result = base_db_client.select(search_cmd)
+    if len(result) > 0:
+        word = result[0][0]
+
+    else:
+        search_cmd = """SELECT word FROM static_vocabulary LIMIT 0, 1;"""
+        result = base_db_client.select(search_cmd)
+        word = result[0][0]
+
+    find_row_num_cmd = f"""
+    SELECT * from (
+    SELECT word,(@rowno:=@rowno+1) as rowno
+    FROM static_vocabulary,(SELECT (@rowno:=-1)) b) t
+    WHERE word = '{word}';
+    """
+    result = base_db_client.select(find_row_num_cmd)
+    row_num = int(result[0][1])
+
+    find_word_details_cmd = f"""SELECT * FROM static_vocabulary LIMIT {row_num}, {voca_num};"""
+    result = base_db_client.select(find_word_details_cmd)
+
+    update_word_cmd = f"""SELECT word FROM static_vocabulary LIMIT {row_num + voca_num}, 1;"""
+    update_result = base_db_client.select(update_word_cmd)
+    update_word = update_result[0][0]
+
+    WordDetails_list = []
+    for i in range(voca_num):
+        contents_list = ast.literal_eval(result[i][2])
+        to_contents_list = []
+        for content in contents_list:
+            c = Content(content["speaker"], content["speakerColor"], content["content"], content["translation"])
+            to_contents_list.append(c)
+        cs = Contents(to_contents_list)
+        wd = WordDetail(result[i][0], result[i][1], cs)
+        WordDetails_list.append(wd)
+    wds = WordDetails(WordDetails_list)
+
+    search_cmd = f"""SELECT word FROM uservoca WHERE username='{user}';"""
+    result = base_db_client.select(search_cmd)
+    if len(result) > 0:
+        update_voca_cmd = f"""UPDATE uservoca SET word='{update_word}' WHERE username='{user}';"""
+        base_db_client.run(update_voca_cmd)
+    else:
+        new_voca_cmd = f"""INSERT INTO uservoca VALUES('{user}', '{update_word}')"""
+        base_db_client.run(new_voca_cmd)
+
+    return wds
+
+
+@app.route('/corpus/word-details', methods=['GET'])
 def get_word_details():
     args = request.args
-    # get UserKey from args
-    user_key = args.get('UserKey')
+    # get userkey from args
+    user_key = args.get('userkey')
     user = get_user_by_key(user_key)
     if user is None:
-        return {'error': 'UserKey not found or expired'}, 400, {'ContentType': 'application/json'}
+        return {'error': 'userkey not found or expired'}, 400, {'ContentType': 'application/json'}
     # # get suitable vocabulary for user
-    # word_details = get_word_details_for_user(user)
+    word_details = get_word_details_for_user(user)
     # return word_details
-    return {'type': 'word-details'}, 200, {'ContentType': 'application/json'}
+    return word_details.to_dict(), 200, {'ContentType': 'application/json'}
 
 
 if __name__ == '__main__':
