@@ -1,6 +1,7 @@
 import ast
 from datetime import datetime, timedelta
 
+import bcrypt
 from flask import Flask, request, send_file
 
 from mysql.Base import BaseMysqlClient, random_str
@@ -32,7 +33,7 @@ def get_salt():
     salt = None
     if len(result) == 0:
         # not registered -- generate salt
-        salt = random_str(64)
+        salt = bcrypt.gensalt().decode('utf8')
     else:
         salt = result[0][0]
     return {"salt": salt}, 200, {'ContentType': 'application/json'}
@@ -45,6 +46,11 @@ def login():
         "username": "...",
         "password": "..."
     }
+    :return
+    {
+        "userkey": ...,
+        "token": ...
+    }
     """
     username = request.json.get("username").strip()  # 用户名
     password = request.json.get("password").strip()  # 密码
@@ -52,6 +58,19 @@ def login():
     login_cmd = f"""SELECT * FROM userinfo WHERE username='{username}' AND password='{password}';"""
     result = base_db_client.select(login_cmd)
     if len(result) > 0:
+        # allocate token
+        check_token_stored_cmd = f"""SELECT token FROM user_token WHERE username='{username}';"""
+        token_result = base_db_client.select(check_token_stored_cmd)
+        token = random_str(64)
+        if len(token_result) > 0:
+            # update token
+            update_token_cmd = f"""UPDATE user_token SET token='{token}' WHERE username='{username}';"""
+            base_db_client.run(update_token_cmd)
+        else:
+            # insert token
+            new_token_cmd = f"""INSERT INTO user_token (username, token) 
+                                VALUES ('{username}', '{token}');"""
+            base_db_client.run(new_token_cmd)
         # login success, allocate userkey
         session_activate_cmd = f"""SELECT userkey, update_time FROM usersession WHERE username='{username}';"""
         session_result = base_db_client.select(session_activate_cmd)
@@ -61,23 +80,89 @@ def login():
             update_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             new_session_cmd = f"""INSERT INTO usersession VALUES ('{username}', '{user_key}', '{update_time}');"""
             base_db_client.run(new_session_cmd)
-            return {'userkey': user_key}, 200, {'ContentType': 'application/json'}
         else:
             # update userkey -- 10 minutes
             update_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            update_session_cmd = f"""UPDATE usersession SET userkey='{user_key}', update_time='{update_time}' 
+            update_session_cmd = f"""UPDATE usersession 
+                                     SET userkey='{user_key}', update_time='{update_time}' 
                                      WHERE username='{username}';"""
             base_db_client.run(update_session_cmd)
-            return {'userkey': user_key}, 200, {'ContentType': 'application/json'}
+        ret_json = {
+            "userkey": user_key,
+            "token": token
+        }
+        return ret_json, 200, {'ContentType': 'application/json'}
     else:
         # login fail
         return {'error': 'login fail'}, 400, {'ContentType': 'application/json'}
 
 
+@app.route("/user/register", methods=['POST'])
+def register():
+    """
+    use to register for user
+    RequestJson:
+    {
+        "username": ...,
+        "password": ...,
+        "salt": ...
+    }
+    :return: 200 for success, 400 for failure
+    """
+    username = request.json.get("username").strip()
+    password = request.json.get("password").strip()
+    salt = request.json.get("salt").strip()
+    # find whether the username has been used
+    duplicate_check_cmd = f"""SELECT username FROM userinfo WHERE username='{username}';"""
+    result = base_db_client.select(duplicate_check_cmd)
+    if len(result) > 0:
+        return {'error': 'username exists'}, 400, {'ContentType': 'application/json'}
+    else:
+        # add to database and return 200
+        insert_cmd = f"""INSERT INTO userinfo (username, password, salt) 
+                         VALUES ('{username}', '{password}', '{salt}');"""
+        base_db_client.run(insert_cmd)
+        return {"status": "OK"}, 200, {'ContentType': 'application/json'}
+
+
+@app.route("/user/update-userkey", methods=['GET'])
+def UpdateUserkeyWithToken():
+    """
+    Path: /user/update-userkey?token=...
+    :return:
+    {
+        "token": ...(new token)
+        "userkey": ...(new userkey)
+    }
+    """
+    args = request.args
+    token = args.get('token')
+    get_user_by_token_cmd = f"""SELECT username FROM user_token WHERE token='{token}';"""
+    result = base_db_client.select(get_user_by_token_cmd)
+    if len(result) == 0:
+        return {'error': 'token not found'}, 400, {'ContentType': 'application/json'}
+    username = result[0][0]
+    # update userkey and token
+    new_token = random_str(64)
+    new_userkey = random_str(64)
+    update_time = datetime.now()
+    update_token_cmd = f"""UPDATE user_token SET token='{new_token}' WHERE username='{username}';"""
+    update_userkey_cmd = f"""UPDATE usersession 
+                             SET userkey='{new_userkey}', update_time='{update_time}' 
+                             WHERE username='{username}';"""
+    base_db_client.run(update_userkey_cmd)
+    base_db_client.run(update_token_cmd)
+    # return result
+    result = {
+        "token": new_token,
+        "userkey": new_userkey
+    }
+    return result, 200, {'ContentType': 'application/json'}
+
+
 """
 语料库获取相关，需要用户已登录并已获得userkey，以后所有数据库获取都需要userkey
 """
-voca_num = 20
 
 
 def get_user_by_key(userkey: str):
@@ -90,7 +175,7 @@ def get_user_by_key(userkey: str):
         return result[0][0]
 
 
-def get_vocabulary_for_user(user: str) -> Vocabulary:
+def get_vocabulary_for_user(user: str, voca_num: int = 20) -> Vocabulary:
     search_cmd = f"""SELECT word FROM uservoca WHERE username='{user}';"""
     result = base_db_client.select(search_cmd)
     if len(result) > 0:
@@ -135,7 +220,7 @@ def get_vocabulary():
     return vocabulary.to_dict(), 200, {'ContentType': 'application/json'}
 
 
-def get_word_details_for_user(user: str) -> WordDetails:
+def get_word_details_for_user(user: str, voca_num: int = 20) -> WordDetails:
     search_cmd = f"""SELECT word FROM uservoca WHERE username='{user}';"""
     result = base_db_client.select(search_cmd)
     if len(result) > 0:
@@ -198,6 +283,24 @@ def get_word_details():
     word_details = get_word_details_for_user(user)
     # return word_details
     return word_details.to_dict(), 200, {'ContentType': 'application/json'}
+
+
+@app.route('/corpus/vocabulary-and-details', methods=['GET'])
+def get_vocabulary_and_details():
+    # 更新后的API -- 同时获取vocabulary和details
+    args = request.args
+    user_key = args.get('userkey')
+    try:
+        count = int(args.get('count'))
+    except ValueError:
+        return {"error": "count type error"}, 400, {'ContentType': 'application/json'}
+    user = get_user_by_key(user_key)
+    if user is None:
+        return {'error': 'userkey not found or expired'}, 400, {'ContentType': 'application/json'}
+    vocabulary = get_vocabulary_for_user(user, count).to_dict()
+    word_details = get_word_details_for_user(user, count).to_dict()
+    return {"vocabulary": vocabulary, "word_details": word_details}, 200, \
+        {'ContentType': 'application/json'}
 
 
 if __name__ == '__main__':

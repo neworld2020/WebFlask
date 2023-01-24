@@ -23,6 +23,8 @@ class BaseMysqlClient:
         self.cursor = self.db.cursor()
 
     def select(self, mysql_command: str) -> Tuple[Tuple]:
+        # ping: auto reconnect to database when connection is closed
+        self.db.ping(True)
         try:
             self.cursor.execute(mysql_command)
             self.db.commit()
@@ -33,6 +35,7 @@ class BaseMysqlClient:
             self.db.rollback()
 
     def run(self, mysql_command: str) -> None:
+        self.db.ping(True)
         try:
             self.cursor.execute(mysql_command)
             self.db.commit()
