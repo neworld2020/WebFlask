@@ -1,4 +1,5 @@
 pymysql
 flask
+flasgger
 marshmallow
 bcrypt

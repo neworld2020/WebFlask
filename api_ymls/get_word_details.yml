@@ -1,0 +1,47 @@
+获取单词详细信息
+---
+description:
+  给定用户密钥，返回今天需学习单词的详细信息。需要注意，该API即将被弃用，请使用
+  /v2/corpus/vocabulary-and-details.
+parameters:
+  - name: userkey
+    in: query
+    required: true
+tags:
+  [ '语料管理' ]
+definitions:
+  WordDetails:
+    type: array
+    items:
+      $ref: '#/definitions/WordDetail'
+  WordDetail:
+    type: object
+    properties:
+      word:
+        type: string
+      word_translation:
+        type: string
+      contents:
+        type: array
+        items:
+          $ref: '#/definitions/Content'
+  Content:
+    type: object
+    properties:
+      speaker:
+        type: string
+      speakerColor:
+        type: string
+      content:
+        type: string
+      translation:
+        type: string
+responses:
+  200:
+    description:
+      成功获取到单词详细信息
+    schema:
+      $ref: '#/definitions/WordDetails'
+  400:
+    description:
+      userkey错误

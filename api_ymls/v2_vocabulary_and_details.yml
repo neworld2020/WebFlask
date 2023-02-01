@@ -1,0 +1,80 @@
+同时获取vocabulary和word details
+---
+description:
+  第二代API，推荐使用。可以同时获取vocabulary和word details，防止一代API
+  中可能出现的两者不同步问题
+parameters:
+  - name: userkey
+    in: query
+    required: true
+  - name: count
+    in: query
+    type: integer
+    required: false
+    default: 20
+tags:
+  [ '语料管理', 'v2接口' ]
+definitions:
+  VocabularyWithDetails:
+    type: object
+    properties:
+      vocabulary:
+        type: array
+        items:
+          $ref: '#/definitions/Word'
+      word_details:
+        type: array
+        items:
+          $ref: '#/definitions/WordDetail'
+  Word:
+    type: object
+    properties:
+      word:
+        type: string
+      familiar_degree:
+        type: integer
+  WordDetail:
+    type: object
+    properties:
+      word:
+        type: string
+      word_translation:
+        type: string
+      contents:
+        type: array
+        items:
+          $ref: '#/definitions/Content'
+  Content:
+    type: object
+    properties:
+      speaker:
+        type: string
+      speakerColor:
+        type: string
+      content:
+        type: string
+      translation:
+        type: string
+responses:
+  200:
+    description:
+      成功获取到vocabulary和word details
+    schema:
+      $ref: '#/definitions/VocabularyWithDetails'
+    examples:
+      { "vocabulary": [ { "word": "abandon", "familiar_degree": 0 } ],
+        "word_details:": [ {
+          "word": "abandon",
+          "word_translation": "v.抛弃",
+          "contents": [
+            {
+              "speaker": "...",
+              "speakerColor": "...",
+              "content": "...",
+              "translation": "..."
+            }
+          ]
+        } ] }
+  400:
+    description:
+      userkey错误

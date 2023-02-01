@@ -1,0 +1,34 @@
+登录
+---
+description:
+  提供用户名与密码（加密后）返回授权字符串进行登录。不同于v1版本，v2版本去掉了变量Token。
+parameters:
+  - name: body
+    in: body
+    schema:
+      $ref: '#/definitions/LoginRequest'
+    required: true
+tags:
+  [ '用户管理', 'v2接口' ]
+definitions:
+  LoginRequest:
+    type: object
+    properties:
+      username:
+        type: string
+      password:
+        type: string
+  UserResponse:
+    type: object
+    properties:
+      userkey:
+        type: string
+responses:
+  200:
+    description: 返回userkey
+    schema:
+      $ref: '#/definitions/UserResponse'
+    examples:
+      { "userkey": "..." }
+  400:
+    description: 登录失败，密码有误

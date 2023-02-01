@@ -1,0 +1,28 @@
+更新登录密钥
+---
+description:
+  利用用户Token更新用户的Token和Userkey。注意，该API即将弃用并转移到/v2/user/update-userkey
+parameters:
+  - name: token
+    in: query
+    type: string
+    required: true
+tags:
+  [ '用户管理' ]
+definitions:
+  UpdateResponse:
+    type: object
+    properties:
+      token:
+        type: string
+      userkey:
+        type: string
+responses:
+  200:
+    description: 密钥更新成功，已返回最新的密钥
+    schema:
+      $ref: '#/definitions/UpdateResponse'
+    examples:
+      { "token": "...", "userkey": "..." }
+  400:
+    description: 更新失败，密钥已过期需要重新登录

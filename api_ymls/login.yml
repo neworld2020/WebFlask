@@ -1,0 +1,36 @@
+登录
+---
+description:
+  提供用户名与密码（加密后）返回授权字符串进行登录，注意，该API将被弃用，请使用/v2/user/login进行登录
+parameters:
+  - name: body
+    in: body
+    schema:
+      $ref: '#/definitions/LoginRequest'
+    required: true
+tags:
+  [ '用户管理' ]
+definitions:
+  LoginRequest:
+    type: object
+    properties:
+      username:
+        type: string
+      password:
+        type: string
+  UserResponse:
+    type: object
+    properties:
+      userkey:
+        type: string
+      token:
+        type: string
+responses:
+  200:
+    description: 返回userkey和token
+    schema:
+      $ref: '#/definitions/UserResponse'
+    examples:
+      { "userkey": "...", "token": "..." }
+  400:
+    description: 登录失败，密码有误

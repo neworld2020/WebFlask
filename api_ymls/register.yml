@@ -1,0 +1,27 @@
+注册
+---
+description:
+  提供用户的用户名、密码、盐进行注册并储存至数据库。如数据库已存在该用户，则注册失败。
+parameters:
+  - name: body
+    in: body
+    schema:
+      $ref: '#/definitions/RegisterRequest'
+    required: true
+tags:
+  [ '用户管理' ]
+definitions:
+  RegisterRequest:
+    type: object
+    properties:
+      username:
+        type: string
+      password:
+        type: string
+      salt:
+        type: string
+responses:
+  200:
+    description: 注册成功
+  400:
+    description: 注册失败，用户名已存在

@@ -1,0 +1,25 @@
+更新登录密钥
+---
+description:
+  利用用户Userkey更新用户的Userkey。注意，在这一版API中无需再使用Token进行更新，userkey完全取代了token的作用。
+parameters:
+  - name: userkey
+    in: query
+    required: true
+tags:
+  [ '用户管理', 'v2接口' ]
+definitions:
+  UpdateResponse:
+    type: object
+    properties:
+      userkey:
+        type: string
+responses:
+  200:
+    description: 密钥更新成功，已返回最新的密钥
+    schema:
+      $ref: '#/definitions/UpdateResponse'
+    examples:
+      { "userkey": "..." }
+  400:
+    description: 更新失败，密钥已过期需要重新登录
