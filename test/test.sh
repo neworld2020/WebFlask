@@ -1,5 +1,8 @@
+# get current path
+sh_path=$(cd "$(dirname "$0")" || exit; pwd)
+
 # install packages
-pip install -r requirements.txt
+pip install -r "$sh_path/requirements.txt"
 
 # run
-pytest ../app.py test_api.py --html ../report/result.html
+pytest "$sh_path/../app.py" "$sh_path/test_api.py" --html "$sh_path/../report/result.html"
