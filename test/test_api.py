@@ -1,6 +1,5 @@
 import json
 
-import bcrypt
 import flask_unittest
 import pytest
 from flask.testing import FlaskClient
@@ -38,8 +37,7 @@ class TestApis(flask_unittest.ClientTestCase):
         if self.salt is None:
             self.test_2_get_salt(client)
         assert self.salt is not None
-        encrypted_pwd = \
-            bcrypt.hashpw(TestApis.test_password.encode('utf8'), self.salt.encode('utf8')).decode('utf8')
+        encrypted_pwd = "$2b$12$VylSSIUNRsxTDbHo1.UnHuDFFv5MV7mgWS8NAsQdiqOl5yAsuGAa."
         data = {"username": TestApis.test_username, "password": encrypted_pwd}
         rv = client.post("/v2/user/login", content_type='application/json', data=json.dumps(data))
         self.assertStatus(rv, 200)
@@ -53,9 +51,7 @@ class TestApis(flask_unittest.ClientTestCase):
         if self.salt is None:
             self.test_2_get_salt(client)
         assert self.salt is not None
-        encrypted_pwd = \
-            bcrypt.hashpw(fail_password.encode('utf8'), self.salt.encode('utf8')).decode('utf8')
-        data = {"username": fail_username, "password": encrypted_pwd}
+        data = {"username": fail_username, "password": fail_password}
         rv = client.post("/v2/user/login", content_type='application/json', data=json.dumps(data))
         self.assertStatus(rv, 400)
 

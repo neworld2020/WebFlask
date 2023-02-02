@@ -9,6 +9,8 @@ from mysql.Base import BaseMysqlClient, random_str
 from response_models import *
 
 app = Flask(__name__)
+app.testing = True
+
 template = {
     "swagger": "2.0",
     "info": {
