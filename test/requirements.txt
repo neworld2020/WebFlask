@@ -2,3 +2,6 @@ pytest
 flask
 flask_unittest
 bcrypt
+pymysql
+flasgger
+marshmallow
