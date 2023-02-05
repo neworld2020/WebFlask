@@ -5,10 +5,12 @@ import bcrypt
 from flasgger import Swagger
 from flask import Flask, request, send_file, send_from_directory
 
+from logs import getLogHandler
 from mysql.Base import BaseMysqlClient, random_str
 from response_models import *
 
 app = Flask(__name__)
+app.logger.addHandler(getLogHandler())
 app.testing = True
 
 template = {
@@ -24,6 +26,11 @@ app.config['JSON_AS_ASCII'] = False
 
 base_db_client = BaseMysqlClient('rm-bp1712iyj3s1906i92o.mysql.rds.aliyuncs.com', 'account_admin', 'account@123456',
                                  'memo-app-db')
+
+
+@app.before_request
+def log_request():
+    app.logger.info('Method:{}, Path:{}, Addr:{}'.format(request.method, request.path, request.remote_addr))
 
 
 @app.route('/')
