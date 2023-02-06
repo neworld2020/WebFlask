@@ -82,6 +82,18 @@ class TestApis(flask_unittest.ClientTestCase):
         self.assertIsNotNone(response['vocabulary'])
         self.assertIsNotNone(response['word_details'])
 
+    def test_8_get_review_test(self, client: FlaskClient):
+        if self.userkey is None:
+            self.test_3_login_succeed(client)
+        assert self.userkey is not None
+        rv = client.get(f"/v2/corpus/review_vocabulary_and_words?userkey={self.userkey}")
+        self.assertStatus(rv, 200)
+        response = json.loads(rv.text)
+        self.assertIn("vocabulary", response.keys())
+        self.assertIn("word_details", response.keys())
+        self.assertIsNotNone(response['vocabulary'])
+        self.assertIsNotNone(response['word_details'])
+
 
 if __name__ == "__main__":
     pytest.main(["test_api.py"])
