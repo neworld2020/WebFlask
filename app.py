@@ -1,5 +1,6 @@
 import ast
 from datetime import datetime, timedelta
+from typing import Tuple
 
 import bcrypt
 from flasgger import Swagger
@@ -156,16 +157,13 @@ def UpdateUserkey():
     """
     args = request.args
     userkey = args.get('userkey')
-    # time span <= 7 days -- auto login
-    find_session_cmd = f"""SELECT update_time FROM usersession WHERE userkey='{userkey}';"""
-    result = base_db_client.select(find_session_cmd)
-    current_time = datetime.now()
-    if len(result) == 0 or current_time - result[0][0] >= timedelta(weeks=1):
-        # fail
+    user = get_user_by_key(userkey)
+    if user is None:
         return {'error': 'wrong userkey or expired userkey'}, 400, {'ContentType': 'application/json'}
     else:
         # update userkey
         update_userkey = random_str(64)
+        current_time = datetime.now()
         time_str = current_time.strftime("%Y-%m-%d %H:%M:%S")
         update_cmd = f"""UPDATE usersession 
                          SET userkey='{update_userkey}', update_time='{time_str}' 
@@ -180,47 +178,18 @@ def UpdateUserkey():
 
 
 def get_user_by_key(userkey: str):
-    get_user_cmd = f"""SELECT * FROM usersession WHERE userkey='{userkey}';"""
-    result = base_db_client.select(get_user_cmd)
-    if len(result) == 0 or datetime.now() - result[0][2] > timedelta(days=1):
-        # userkey not found or expired -- one day
+    find_session_cmd = f"""SELECT update_time FROM usersession WHERE userkey='{userkey}';"""
+    result = base_db_client.select(find_session_cmd)
+    current_time = datetime.now()
+    if len(result) == 0 or current_time - result[0][0] >= timedelta(weeks=1):
+        # userkey not found or expired -- one week
         return None
     else:
         return result[0][0]
 
 
-def get_vocabulary_for_user(user: str, voca_num: int = 20) -> Vocabulary:
-    search_cmd = f"""SELECT word FROM uservoca WHERE username='{user}';"""
-    result = base_db_client.select(search_cmd)
-    if len(result) > 0:
-        word = result[0][0]
-        new_voca_cmd = f"""INSERT INTO static_vocabulary(%s) VALUES(%s)"""
-    else:
-        search_cmd = """SELECT word FROM static_vocabulary LIMIT 0, 1;"""
-        result = base_db_client.select(search_cmd)
-        word = result[0][0]
-
-    find_row_num_cmd = f"""
-    SELECT * from (
-    SELECT word,(@rowno:=@rowno+1) as rowno
-    FROM static_vocabulary,(SELECT (@rowno:=-1)) b) t
-    WHERE word = '{word}';
-    """
-    result = base_db_client.select(find_row_num_cmd)
-    row_num = int(result[0][1])
-
-    find_vocabulary_cmd = f"""SELECT word FROM static_vocabulary LIMIT {row_num}, {voca_num};"""
-    result = base_db_client.select(find_vocabulary_cmd)
-
-    word_list = []
-    for i in range(voca_num):
-        w = Word(result[i][0], 0)
-        word_list.append(w)
-    v = Vocabulary(word_list)
-    return v
-
-
-def get_word_details_for_user(user: str, voca_num: int = 20) -> WordDetails:
+def get_corpus_for_user(user: str, voca_num: int = 20) -> Tuple[Vocabulary, WordDetails]:
+    # 从数据库中搜索
     search_cmd = f"""SELECT word FROM uservoca WHERE username='{user}';"""
     result = base_db_client.select(search_cmd)
     if len(result) > 0:
@@ -247,9 +216,13 @@ def get_word_details_for_user(user: str, voca_num: int = 20) -> WordDetails:
     update_result = base_db_client.select(update_word_cmd)
     update_word = update_result[0][0]
 
+    # 返回结构组织
     WordDetails_list = []
+    vocabulary = []
     for i in range(voca_num):
         contents_list = ast.literal_eval(result[i][2])
+        w = Word(result[i][0], 0)
+        vocabulary.append(w)
         to_contents_list = []
         for content in contents_list:
             c = Content(content["speaker"], content["speakerColor"], content["content"], content["translation"])
@@ -257,8 +230,10 @@ def get_word_details_for_user(user: str, voca_num: int = 20) -> WordDetails:
         cs = Contents(to_contents_list)
         wd = WordDetail(result[i][0], result[i][1], cs)
         WordDetails_list.append(wd)
+    vs = Vocabulary(vocabulary)
     wds = WordDetails(WordDetails_list)
 
+    # 更新用户词汇表 -- 未来讲拆解至另外的函数
     search_cmd = f"""SELECT word FROM uservoca WHERE username='{user}';"""
     result = base_db_client.select(search_cmd)
     if len(result) > 0:
@@ -268,7 +243,7 @@ def get_word_details_for_user(user: str, voca_num: int = 20) -> WordDetails:
         new_voca_cmd = f"""INSERT INTO uservoca VALUES('{user}', '{update_word}')"""
         base_db_client.run(new_voca_cmd)
 
-    return wds
+    return vs, wds
 
 
 @app.route('/v2/corpus/vocabulary-and-details', methods=['GET'])
@@ -285,8 +260,9 @@ def get_vocabulary_and_details():
     user = get_user_by_key(user_key)
     if user is None:
         return {'error': 'userkey not found or expired'}, 400, {'ContentType': 'application/json'}
-    vocabulary = get_vocabulary_for_user(user, count).to_dict()
-    word_details = get_word_details_for_user(user, count).to_dict()
+    corpus = get_corpus_for_user(user, count)
+    vocabulary = corpus[0].to_dict()
+    word_details = corpus[1].to_dict()
     return {"vocabulary": vocabulary, "word_details": word_details}, 200, \
         {'ContentType': 'application/json'}
 
