@@ -188,9 +188,11 @@ def get_user_by_key(userkey: str):
         return result[0][0]
 
 
-def get_corpus_for_user(user: str, voca_num: int = 20) -> Tuple[Vocabulary, WordDetails]:
+def get_corpus_for_user(user: str, voca_num: int = 20, review=True) -> Tuple[Vocabulary, WordDetails]:
     # 从数据库中搜索
-    search_cmd = f"""SELECT word FROM uservoca WHERE username='{user}';"""
+    search_study = f"""SELECT word FROM uservoca WHERE username='{user}';"""
+    search_review = f"""SELECT review_word FROM uservoca WHERE username='{user}';"""
+    search_cmd = search_review if review else search_study
     result = base_db_client.select(search_cmd)
     if len(result) > 0:
         word = result[0][0]
@@ -237,10 +239,14 @@ def get_corpus_for_user(user: str, voca_num: int = 20) -> Tuple[Vocabulary, Word
     search_cmd = f"""SELECT word FROM uservoca WHERE username='{user}';"""
     result = base_db_client.select(search_cmd)
     if len(result) > 0:
-        update_voca_cmd = f"""UPDATE uservoca SET word='{update_word}' WHERE username='{user}';"""
+        update_voca_cmd = ""
+        if review:
+            update_voca_cmd = f"""UPDATE uservoca SET review_word='{update_word}' WHERE username='{user}';"""
+        else:
+            update_voca_cmd = f"""UPDATE uservoca SET word='{update_word}' WHERE username='{user}';"""
         base_db_client.run(update_voca_cmd)
     else:
-        new_voca_cmd = f"""INSERT INTO uservoca VALUES('{user}', '{update_word}')"""
+        new_voca_cmd = f"""INSERT INTO uservoca VALUES('{user}', '{update_word}', 'abandon')"""
         base_db_client.run(new_voca_cmd)
 
     return vs, wds
@@ -261,6 +267,26 @@ def get_vocabulary_and_details():
     if user is None:
         return {'error': 'userkey not found or expired'}, 400, {'ContentType': 'application/json'}
     corpus = get_corpus_for_user(user, count)
+    vocabulary = corpus[0].to_dict()
+    word_details = corpus[1].to_dict()
+    return {"vocabulary": vocabulary, "word_details": word_details}, 200, \
+        {'ContentType': 'application/json'}
+
+
+@app.route('/v2/corpus/review_vocabulary_and_words', methods=['GET'])
+def get_review_corpus():
+    """
+    file: api_ymls/v2_review_corpus.yml
+    """
+    args = request.args
+    user_key = args.get('userkey')
+    user = get_user_by_key(user_key)
+    if user is None:
+        return {'error': 'userkey not found or expired'}, 400, {'ContentType': 'application/json'}
+    corpus = get_corpus_for_user(user, review=True)
+    if corpus is None:
+        # no word need to review
+        return {'tip': "No Word To Review"}, 401, {'ContentType': 'application/json'}
     vocabulary = corpus[0].to_dict()
     word_details = corpus[1].to_dict()
     return {"vocabulary": vocabulary, "word_details": word_details}, 200, \

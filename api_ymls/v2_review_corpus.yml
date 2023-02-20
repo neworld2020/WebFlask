@@ -1,15 +1,10 @@
-同时获取vocabulary和word details
+获取需要复习的单词的语料，这里语料包括vocabulary和word details
 ---
 description:
-  第二代API，推荐使用。可以同时获取vocabulary和word details，防止一代API
-  中可能出现的两者不同步问题
+  获取需要复习的单词的语料，这里语料包括vocabulary和word details.需要复习的单词由服务器提供。无需指定获取数量。
 parameters:
   - name: userkey
     in: query
-    required: true
-  - name: count
-    in: query
-    type: integer
     required: true
 tags:
   [ '语料管理', 'v2接口' ]
@@ -57,7 +52,7 @@ definitions:
 responses:
   200:
     description:
-      成功获取到vocabulary和word details
+      成功获取到需要复习的单词语料(corpus指vocabulary&word details)
     schema:
       $ref: '#/definitions/VocabularyWithDetails'
     examples:
@@ -77,3 +72,6 @@ responses:
   400:
     description:
       userkey错误
+  401:
+    description:
+      无需要复习的单词
