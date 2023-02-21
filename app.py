@@ -178,17 +178,17 @@ def UpdateUserkey():
 
 
 def get_user_by_key(userkey: str):
-    find_session_cmd = f"""SELECT update_time FROM usersession WHERE userkey='{userkey}';"""
+    find_session_cmd = f"""SELECT update_time, username FROM usersession WHERE userkey='{userkey}';"""
     result = base_db_client.select(find_session_cmd)
     current_time = datetime.now()
     if len(result) == 0 or current_time - result[0][0] >= timedelta(weeks=1):
         # userkey not found or expired -- one week
         return None
     else:
-        return result[0][0]
+        return result[0][1]
 
 
-def get_corpus_for_user(user: str, voca_num: int = 20, review=True) -> Tuple[Vocabulary, WordDetails]:
+def get_corpus_for_user(user: str, voca_num: int = 20, review=False) -> Tuple[Vocabulary, WordDetails]:
     # 从数据库中搜索
     search_study = f"""SELECT word FROM uservoca WHERE username='{user}';"""
     search_review = f"""SELECT review_word FROM uservoca WHERE username='{user}';"""
