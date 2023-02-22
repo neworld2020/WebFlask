@@ -147,6 +147,9 @@ def register():
         insert_cmd = f"""INSERT INTO userinfo (username, password, salt) 
                          VALUES ('{username}', '{password}', '{salt}');"""
         base_db_client.run(insert_cmd)
+        # add to uservoca
+        insert_cmd = f"""INSERT INTO uservoca (username) VALUES ('{username}');"""
+        base_db_client.run(insert_cmd)
         return {"status": "OK"}, 200, {'ContentType': 'application/json'}
 
 
