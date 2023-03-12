@@ -4,3 +4,5 @@ flask
 flasgger
 marshmallow
 bcrypt
+requests
+BeautifulSoup4

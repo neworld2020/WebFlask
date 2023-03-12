@@ -6,6 +6,7 @@ import bcrypt
 from flasgger import Swagger
 from flask import Flask, request, send_file, send_from_directory
 
+from ZJUAutomate import HomeworkAutomate
 from logs import getLogHandler
 from mysql.Base import BaseMysqlClient, random_str
 from response_models import *
@@ -27,6 +28,7 @@ app.config['JSON_AS_ASCII'] = False
 
 base_db_client = BaseMysqlClient('rm-bp1712iyj3s1906i92o.mysql.rds.aliyuncs.com', 'account_admin', 'account@123456',
                                  'memo-app-db')
+homework_getter = HomeworkAutomate("3200105210", "zjdx774225688")
 
 
 @app.before_request
@@ -45,6 +47,15 @@ def index():
         description: Index Page
     """
     return send_file("index/index.html")
+
+
+@app.route('/homework', methods=['GET'])
+def get_homework():
+    try:
+        homework = homework_getter.get()
+        return homework, 200, {'ContentType': 'application/json'}
+    except RuntimeError:
+        return {"error": "your password may be changed"}, 400, {'ContentType': 'application/json'}
 
 
 @app.route('/file/<filename>', methods=['GET'])

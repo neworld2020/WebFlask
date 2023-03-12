@@ -94,6 +94,12 @@ class TestApis(flask_unittest.ClientTestCase):
         self.assertIsNotNone(response['vocabulary'])
         self.assertIsNotNone(response['word_details'])
 
+    def test_9_get_homework(self, client: FlaskClient):
+        rv = client.get("/homework")
+        self.assertStatus(rv, 200)
+        response = json.loads(rv.text)
+        self.assertIn("todo_list", response.keys())
+
 
 if __name__ == "__main__":
     pytest.main(["test_api.py"])
